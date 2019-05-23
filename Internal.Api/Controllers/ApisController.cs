@@ -77,73 +77,6 @@ namespace Internal.Api.Controllers
             return RetJsonResult(ApiResponseCodeEnum.Fail, "获取失败");
         }
 
-        //分红理财首页数据接口
-        public ActionResult BSH()
-        {
-            BonusShareHomePageParamter param = GetRequestParamter<BonusShareHomePageParamter>();
-
-            ActionResult ar = AnalysisToken(param, out bool isret, out tMembersEntity member);
-            if (isret)
-                return ar;
-
-            var where = LinqExtensions.True<tNoticesEntity>();
-            where = where.And(n => n.noticeState.Value.Equals(1));
-            Pagination pg = new Pagination();
-            pg.sidx = "createTime";
-            pg.sord = "desc";
-            pg.page = 1;
-            pg.rows = 1;
-            List<tNoticesEntity> notices = tNoticesBLL.Instance.GetList(where, pg);
-            string notice = "";
-            notices.ForEach(n =>
-            {
-                notice += n.noticeTitle + ";   ";
-            });
-
-            return RetJsonResult(ApiResponseCodeEnum.Success, "", new
-            {
-                leadLevel = ((MemberLeadLevelEnum)member.mbLeadLevel.Value).GetDescription(),
-                notice,
-                activeB = member.mbActivateWalletBalance.ToDecimal() / 10000,
-                cashB = member.mbCashWalletBalance.ToDecimal() / 10000,
-                gCashB = member.mbGoldCashWalletBalance.ToDecimal() / 10000,
-                profit = member.mbProfitAmount.ToDecimal() / 10000
-            });
-        }
-
-        //公告列表
-        public ActionResult Notices()
-        {
-            NoticesParamter param = GetRequestParamter<NoticesParamter>();
-
-            ActionResult ar = AnalysisToken(param, out bool isret, out tMembersEntity member);
-            if (isret)
-                return ar;
-
-            Pagination pg = new Pagination
-            {
-                sidx = "noticeSort",
-                sord = "desc",
-                page = param.page,
-                rows = param.size
-            };
-            var where = LinqExtensions.True<tNoticesEntity>();
-            where = where.And(n => n.noticeState.Value.Equals(1));//正常状态
-            where = where.And(n => n.noticeIsBanner.Value.Equals(2));//非Banner
-            List<tNoticesEntity> list = tNoticesBLL.Instance.GetList(where, pg);
-            return RetJsonResult(ApiResponseCodeEnum.Success, "", new
-            {
-                list = list.Select(r => new
-                {
-                    noticeId = r.noticeId,
-                    title = r.noticeTitle,
-                    contentType = r.contentType,
-                    linkUrl = r.noticeLinkUrl
-                }),
-                total = pg.records,
-                pages = pg.total
-            });
-        }
 
         #region 会员信息
 
@@ -166,39 +99,6 @@ namespace Internal.Api.Controllers
                 inviteUrl = string.Format("{0}?userno={1}", WebConfigHelper.WebDomain, member.mbUserNo),
                 qrImg = string.Format("{0}{1}", WebConfigHelper.FileDomain, member.mbInviteQrImg)
             });
-        }
-
-        //重新生成邀请二维码
-        public ActionResult GenQrImg()
-        {
-            ApiParamter param = GetRequestParamter<ApiParamter>();
-
-            ActionResult ar = AnalysisToken(param, out bool isret, out tMembersEntity member);
-            if (isret)
-                return ar;
-
-            string imgpath = string.Format("{0}{1}{2}.jpg", WebConfigHelper.ImageSavePath,
-                                                        WebConfigHelper.ImageSavePath.EndsWith("/") ? "" : "/",
-                                                        RandHelp.GenerateGuid16String());
-            string imgdiskpath = string.Format("{0}{1}{2}", WebConfigHelper.FileSaveDiskPath,
-                                                        WebConfigHelper.FileSaveDiskPath.EndsWith("/") ? "" : "/",
-                                                        imgpath);
-            if (ZQRCodeHelper.GenerateQr(string.Format("{0}?userno={1}", WebConfigHelper.WebDomain, member.mbUserNo), imgdiskpath, out string msg))
-            {
-                tMembersEntity entity = new tMembersEntity()
-                {
-                    mbId = param.user.Id,
-                    mbInviteQrImg = imgpath
-                };
-                if (tMembersBLL.Instance.SubmitForm(entity, entity.mbId))
-                {
-                    return RetJsonResult(ApiResponseCodeEnum.Success, "生成成功", new
-                    {
-                        imgurl = imgpath
-                    });
-                }
-            }
-            return RetJsonResult(ApiResponseCodeEnum.Fail, "生成失败");
         }
 
         //修改密码
@@ -235,38 +135,6 @@ namespace Internal.Api.Controllers
             return RetJsonResult(ApiResponseCodeEnum.Fail, "修改失败");
         }
 
-        //修改二级密码
-        public ActionResult MTPwd()
-        {
-            ModifyTowPwdParamter param = GetRequestParamter<ModifyTowPwdParamter>();
-
-            ActionResult ar = AnalysisToken(param, out bool isret, out tMembersEntity member);
-            if (isret)
-                return ar;
-
-            if(!member.mbMobileNum.Equals(param.mobile))
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "手机号不正确");
-
-            tMobileMsgEntity _msg = tMobileMsgBLL.Instance.GetLastUnUseMsgByMobile(param.mobile, MobileMsgFuncEnum.FindTPwd.GetHashCode());
-            if (_msg == null || !param.vcode.Equals(_msg.validCode))
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "验证码不正确");
-
-            if (param.pwd.Length < 8)
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "密码不能少于8位");
-            if (!param.pwd.IsValidPwd())
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "密码格式不正确");
-            if (!param.pwd.Equals(param.surepwd))
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "密码与确认密码不一致");
-
-            tMembersEntity _member = new tMembersEntity()
-            {
-                mbId = param.user.Id,
-                mbTwoPwd = MD5Helper.PwdEncryption(param.pwd)
-            };
-            if (tMembersBLL.Instance.SubmitForm(_member, _member.mbId))
-                return RetJsonResult(ApiResponseCodeEnum.Success, "修改成功");
-            return RetJsonResult(ApiResponseCodeEnum.Fail, "修改失败");
-        }
 
         //银行卡列表
         public ActionResult Banks()
@@ -290,49 +158,10 @@ namespace Internal.Api.Controllers
             }));
         }
 
-        //添加银行卡
-        public ActionResult AddBank()
-        {
-            AddBankParamter param = GetRequestParamter<AddBankParamter>();
-            ActionResult ar = AnalysisToken(param, out bool isret, out tMembersEntity member);
-            if (isret)
-                return ar;
-
-            if (param.name.IsEmpty())
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "请输入正确的银行名称");
-            if (param.code.IsEmpty())
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "请输入正确的银行卡号");
-            if (param.realname.IsEmpty())
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "请输入正确的开户名");
-            if (param.addr.IsEmpty())
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "请输入正确的开户行地址");
-
-            tBanksEntity bank = new tBanksEntity()
-            {
-                mbId = param.user.Id,
-                bankName = param.name,
-                bankCode = param.code,
-                accountName = param.realname,
-                bankAddr = param.addr
-            };
-            return tBanksBLL.Instance.AddBank(bank, out string ret)
-                ? RetJsonResult(ApiResponseCodeEnum.Success, "添加成功")
-                : RetJsonResult(ApiResponseCodeEnum.Success, ret.IsEmpty() ? "添加失败" : ret);
-        }
-
-        #endregion
-
-        #region 每日签到 未实现
-
-        #endregion
-
-        #region 抢红包 未实现
-
         #endregion
 
         #region 收益记录
 
-        //日分红收益记录
         public ActionResult DayBonusRecord()
         {
             ProfitRecordParamter param = GetRequestParamter<ProfitRecordParamter>();
@@ -384,56 +213,6 @@ namespace Internal.Api.Controllers
                 });
         }
 
-        //分红代数奖收益记录
-        public ActionResult ZBDayBonusRecord()
-        {
-            ProfitRecordParamter param = GetRequestParamter<ProfitRecordParamter>();
-
-            ActionResult ar = AnalysisToken(param, out bool isret, out tMembersEntity member);
-            if (isret)
-                return ar;
-
-            Pagination pg = new Pagination
-            {
-                page = param.page,
-                rows = param.size,
-                sidx = "rewardTime",
-                sord = "desc"
-            };
-            pg.AddWhere("mbId", member.mbId);
-            if (param.sdate.IsDateString())
-            {
-                pg.AddWhere("rewardTime", DateHelper.GetTimeStamp_Seconds(string.Format("{0} 00:00:00", param.sdate)), SqlDbType.BigInt, CompareSymbolEnum.MoreThanEqual);
-            }
-            if (param.edate.IsDateString())
-            {
-                pg.AddWhere("rewardTime", DateHelper.GetTimeStamp_Seconds(string.Format("{0} 23:59:59", param.edate)), SqlDbType.BigInt, CompareSymbolEnum.LessThanEqual);
-            }
-            List<tUserZBDayBonusRecordEntity> list = tUserZBDayBonusRecordBLL.Instance.GetList(pg);
-            return RetJsonResult(ApiResponseCodeEnum.Success, "", new
-            {
-                list = list.Select(r => new
-                {
-                    r.recordId,
-                    time = DateHelper.IntToDateTime(r.rewardTime).ToString("yyyy-MM-dd HH:mm:ss"),
-                    ratio = string.Format("{0}%", r.ratio.ToDecimal() / 10000),
-                    amount = r.rewardAmount.ToDecimal() / 10000,
-                    desc = string.Format("分红代数奖({0})", r.investUserNo),
-                    detail = new
-                    {
-                        no = r.investNo,
-                        userNo = r.investUserNo,
-                        amount = r.investAmount,
-                        time = DateHelper.IntToDateTime(r.investTime).ToString("yyyy-MM-dd HH:mm:ss"),
-                        level = r.mbpkLevelName,
-                        state = ((InvestStopStateEnum)r.stopState).GetDescription(),
-                        stime = DateHelper.IntToDateTime(r.stopTime).ToString("yyyy-MM-dd HH:mm:ss")
-                    }
-                }),
-                total = pg.records,
-                pages = pg.total
-            });
-        }
 
         //直推奖收益记录
         public ActionResult IvBonusRecord()
@@ -474,57 +253,6 @@ namespace Internal.Api.Controllers
                     {
                         no = r.investNo,
                         userNo = r.inviteUserNo,
-                        amount = r.investAmount,
-                        time = DateHelper.IntToDateTime(r.investTime).ToString("yyyy-MM-dd HH:mm:ss"),
-                        level = r.mbpkLevelName,
-                        state = ((InvestStopStateEnum)r.stopState).GetDescription(),
-                        stime = DateHelper.IntToDateTime(r.stopTime).ToString("yyyy-MM-dd HH:mm:ss")
-                    }
-                }),
-                total = pg.records,
-                pages = pg.total
-            });
-        }
-
-        //代理领导奖收益记录
-        public ActionResult LBonusRecord()
-        {
-            ProfitRecordParamter param = GetRequestParamter<ProfitRecordParamter>();
-
-            ActionResult ar = AnalysisToken(param, out bool isret, out tMembersEntity member);
-            if (isret)
-                return ar;
-
-            Pagination pg = new Pagination
-            {
-                page = param.page,
-                rows = param.size,
-                sidx = "bonusTime",
-                sord = "desc"
-            };
-            pg.AddWhere("mbId", member.mbId);
-            if (param.sdate.IsDateString())
-            {
-                pg.AddWhere("bonusTime", DateHelper.GetTimeStamp_Seconds(string.Format("{0} 00:00:00", param.sdate)), SqlDbType.BigInt, CompareSymbolEnum.MoreThanEqual);
-            }
-            if (param.edate.IsDateString())
-            {
-                pg.AddWhere("bonusTime", DateHelper.GetTimeStamp_Seconds(string.Format("{0} 23:59:59", param.edate)), SqlDbType.BigInt, CompareSymbolEnum.LessThanEqual);
-            }
-            List<tUserLeadBonusRecordEntity> list = tUserLeadBonusRecordBLL.Instance.GetList(pg);
-            return RetJsonResult(ApiResponseCodeEnum.Success, "",new
-            {
-                list = list.Select(r => new
-                {
-                    r.recordId,
-                    time = DateHelper.IntToDateTime(r.bonusTime).ToString("yyyy-MM-dd HH:mm:ss"),
-                    ratio = string.Format("{0}%", r.bonusRatio.ToDecimal() / 10000),
-                    amount = r.bonusAmount.ToDecimal() / 10000,
-                    desc = string.Format("领导奖({0})", r.investUserNo),
-                    detail = new
-                    {
-                        no = r.investNo,
-                        userNo = r.investUserNo,
                         amount = r.investAmount,
                         time = DateHelper.IntToDateTime(r.investTime).ToString("yyyy-MM-dd HH:mm:ss"),
                         level = r.mbpkLevelName,
@@ -585,40 +313,6 @@ namespace Internal.Api.Controllers
             });
         }
 
-        //激活币互转
-        public ActionResult ActiveTrans()
-        {
-            ActiveWalletTransParamter param = GetRequestParamter<ActiveWalletTransParamter>();
-
-            bool isret;
-            tMembersEntity member;
-            ActionResult ar = AnalysisToken(param, out isret, out member);
-            if (isret)
-                return ar;
-
-            if (param.amount % 100 > 0)
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "转出金额必须是100的整数倍");
-
-            if (MD5Helper.PwdEncryption(param.pwd).Equals(member.mbTwoPwd))
-                return RetJsonResult(ApiResponseCodeEnum.Fail, "二级密码不正确");
-
-            tUserActiveWalletTransRecordEntity tran = new tUserActiveWalletTransRecordEntity()
-            {
-                fromMbId = member.mbId,
-                toMbId = param.toMbId,
-                transAmount = param.amount * 10000,
-                ip = IPAddressHelper.GetClientIPAddress,
-                client = param.clientType
-            };
-            string ret;
-            if (tUserActiveWalletTransRecordBLL.Instance.Trans(tran,out ret))
-            {
-                return RetJsonResult(ApiResponseCodeEnum.Success, "转出成功");
-            }
-            return RetJsonResult(ApiResponseCodeEnum.Success, ret.IsEmpty() ? "转出失败" : ret);
-        }
-
-        
 
         //各钱包账务明细
         public ActionResult WalletRecord()
